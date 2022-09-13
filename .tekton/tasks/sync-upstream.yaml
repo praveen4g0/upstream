@@ -1,0 +1,86 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: sync-upstream
+spec:
+  workspaces:
+  - name: source
+  - name: ssh-directory
+    description: |
+      A .ssh directory with private key, known_hosts, config, etc. Copied to
+      the user's home before git commands are executed. Used to authenticate
+      with the git remote when performing the clone. Binding a Secret to this
+      Workspace is strongly recommended over other volume types.
+  params:
+  - name: branch
+    type: string
+    description: Branch to which we raise pr against, usually same as RELEASE
+    default: release-next
+  - name: upstream
+    type: string
+    description: Remote to create the PR onto
+    default: ssh://git@github.com:praveen4g0/upstream.git
+  - name: downstream
+    type: string
+    description: Remote to fetch actual code
+    default: ssh://git@gitlab.cee.redhat.com:pthangad/downstream.git
+  steps:
+  - name: sync-upstream
+    image: quay.io/openshift-pipeline/p12n:latest
+    workingDir: $(workspaces.source.path)
+    script: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      OPENSHIFT_REMOTE=${OPENSHIFT_REMOTE:-downstream}
+
+      mkdir -p ~/.ssh
+      cp -v $(workspaces.ssh-directory.path)/id_rsa ~/.ssh/id_ed25519
+      cp -v $(workspaces.ssh-directory.path)/known_hosts ~/.ssh/known_hosts
+      chmod -R 400 ~/.ssh/*
+      
+      git init .
+
+      # set git config
+      git config --global user.email "praveen.thangadancha@gmail.com"
+      git config --global user.name "Gitlab pthangad bot"
+      
+      # Add git remotes
+      git remote add upstream $(params.upstream)
+      git remote add ${OPENSHIFT_REMOTE} $(params.downstream)
+
+      # Reset release-next to upstream/main.
+      git fetch upstream main
+      sha=$(git rev-parse --short upstream/main)
+      git checkout upstream/main --no-track -B $(params.branch)-ci-${sha}
+
+      # Update openshift's master and take all needed files from there.
+      git fetch ${OPENSHIFT_REMOTE} main
+      git checkout FETCH_HEAD openshift
+
+      if [[ -d openshift ]];then
+          for f in openshift/*.patch;do
+              [[ -f ${f} ]] || continue
+              git apply ${f}
+          done
+          rm -rf openshift
+      fi
+      
+      # Look for changes and peform commit and push to changesets
+      CHANGES=$(git status -s)
+      if [[ -n "${CHANGES}" ]]; then
+      git add .
+      CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+      if [[ "${CURRENT_BRANCH}" == "$(params.branch)-ci-${sha}" ]]; then
+          git commit -s -m ":robot: update upstream sources"
+          git push -o merge_request.create \
+                  -o merge_request.target=$(params.branch) \
+                  -o merge_request.remove_source_branch=true \
+                  -o merge_request.title="[$(params.branch)] Update upstream sources [${sha}]" \
+                  -o merge_request.label="bot" \
+                  -o merge_request.merge_when_pipeline_succeeds \
+                  ${OPENSHIFT_REMOTE} $(params.branch)-ci-${sha}
+      fi
+      else
+          echo "No changes, no changeset"
+      fi
