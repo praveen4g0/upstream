@@ -49,10 +49,16 @@ spec:
       git remote add upstream $(params.upstream)
       git remote add ${OPENSHIFT_REMOTE} $(params.downstream)
 
-      # Reset release-next to upstream/dev.
-      git fetch upstream dev
-      sha=$(git rev-parse --short upstream/dev)
-      git checkout upstream/dev --no-track -B $(params.branch)-ci-${sha}
+      # Reset release-next to upstream/main.
+      git fetch upstream main
+      sha=$(git rev-parse --short upstream/main)
+      git checkout upstream/main --no-track -B $(params.branch)-ci-${sha}
+
+      BRANCH_EXISTS=$(git ls-remote --heads ${OPENSHIFT_REMOTE} refs/heads/$(params.branch)-ci-${sha} | awk '{print $1 }')
+      if [[ -n "${BRANCH_EXISTS}" ]]; then
+         echo "Seems branch already exisits"
+         exit 0
+      fi
 
       # Update openshift's master and take all needed files from there.
       git fetch ${OPENSHIFT_REMOTE} main
@@ -71,16 +77,16 @@ spec:
       if [[ -n "${CHANGES}" ]]; then
       git add .
       CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-      if [[ "${CURRENT_BRANCH}" == "$(params.branch)-ci-${sha}" ]]; then
-          git commit -s -m ":robot: update upstream sources"
-          git push -o merge_request.create \
-                  -o merge_request.target=$(params.branch) \
-                  -o merge_request.remove_source_branch=true \
-                  -o merge_request.title="[$(params.branch)] Update upstream sources [${sha}]" \
-                  -o merge_request.label="bot" \
-                  -o merge_request.merge_when_pipeline_succeeds \
-                  ${OPENSHIFT_REMOTE} $(params.branch)-ci-${sha}
-      fi
+        if [[ "${CURRENT_BRANCH}" == "$(params.branch)-ci-${sha}" ]]; then
+            git commit -s -m ":robot: update upstream sources"
+            git push -o merge_request.create \
+                    -o merge_request.target=$(params.branch) \
+                    -o merge_request.remove_source_branch=true \
+                    -o merge_request.title="[$(params.branch)] Update upstream sources [${sha}]" \
+                    -o merge_request.label="bot" \
+                    -o merge_request.merge_when_pipeline_succeeds \
+                    ${OPENSHIFT_REMOTE} $(params.branch)-ci-${sha}
+        fi
       else
           echo "No changes, no changeset"
       fi
