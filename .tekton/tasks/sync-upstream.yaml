@@ -49,10 +49,10 @@ spec:
       git remote add upstream $(params.upstream)
       git remote add ${OPENSHIFT_REMOTE} $(params.downstream)
 
-      # Reset release-next to upstream/main.
-      git fetch upstream main
-      sha=$(git rev-parse --short upstream/main)
-      git checkout upstream/main --no-track -B $(params.branch)-ci-${sha}
+      # Reset release-next to upstream/dev.
+      git fetch upstream dev
+      sha=$(git rev-parse --short upstream/dev)
+      git checkout upstream/dev --no-track -B $(params.branch)-ci-${sha}
 
       # Update openshift's master and take all needed files from there.
       git fetch ${OPENSHIFT_REMOTE} main
