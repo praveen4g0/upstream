@@ -23,17 +23,17 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "2"
 spec:
   pipelineSpec:
-    finally:
-      - name: finally
-        taskRef:
-          name: send-slack-notification
-        params:
-          - name: report_success
-            value: 'true'
-          - name: log_url
-            value: "https://console-openshift-console.apps.pthangad49f.ocp-gitops-qe.com"         
-          - name: openshift
-            value: "true"
+    # finally:
+    #   - name: finally
+    #     taskRef:
+    #       name: send-slack-notification
+    #     params:
+    #       - name: report_success
+    #         value: 'true'
+    #       - name: log_url
+    #         value: "https://console-openshift-console.apps.pthangad49f.ocp-gitops-qe.com"         
+    #       - name: openshift
+    #         value: "true"
     workspaces:
       - name: source
       - name: ssh-directory
